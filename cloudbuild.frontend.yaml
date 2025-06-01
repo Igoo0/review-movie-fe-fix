@@ -1,0 +1,52 @@
+steps:
+  # Step 1: Install dependencies
+  - name: "gcr.io/cloud-builders/npm"
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ ! -d "node_modules" ]; then
+          echo "Installing dependencies..."
+          npm ci
+        else
+          echo "Skipping npm install, node_modules exists."
+        fi
+    dir: "frontend"
+    volumes:
+      - name: "npm-cache"
+        path: /root/.npm
+  
+  # Step 2: Build frontend 
+  - name: "gcr.io/cloud-builders/npm"
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        npm run build
+    dir: "frontend"
+    volumes:  
+      - name: "npm-cache"
+        path: /root/.npm
+  
+  # Step 3: Deploy with retry logic
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        for i in {1..3}; do
+          echo "Deployment attempt $i"
+          if gcloud app deploy --quiet; then
+            echo "Deployment successful"
+            exit 0
+          else
+            echo "Deployment failed, waiting 30 seconds before retry..."
+            sleep 30
+          fi
+        done
+        echo "All deployment attempts failed"
+        exit 1
+    dir: "frontend"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
